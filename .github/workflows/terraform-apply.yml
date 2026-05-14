@@ -18,6 +18,7 @@ jobs:
   terraform:
     name: Terraform Apply
     runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
 
     env:
       GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
@@ -37,17 +38,18 @@ jobs:
         uses: dawidd6/action-download-artifact@v16
         with:
           name: terraform-plan
-          workflow: ci.yml
+          workflow: terraform-plan.yml
           workflow_conclusion: success
           commit: ${{ github.event.pull_request.head.sha }}
           path: ./artifacts
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.15.0
+          terraform_wrapper: false
 
       - name: Initialise Terraform
         run: terraform init
 
       - name: Apply Terraform
-        run: terraform apply ./artifacts/terraform.plan
+        run: terraform apply -auto-approve ./artifacts/terraform.plan
