@@ -10,6 +10,10 @@ permissions:
   pull-requests: write
   id-token: write
 
+concurrency:
+  group: terraform
+  cancel-in-progress: true
+
 jobs:
   terraform:
     name: Terraform Plan
@@ -29,83 +33,35 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: eu-west-1
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v4
+      - uses: hashicorp/setup-terraform@v4
         with:
-          terraform_version: "~> 1.15"
+          terraform_version: 1.15.0
+          terraform_wrapper: false
 
-      - name: Terraform Init
-        id: init
+      - name: Terraform fmt
+        run: terraform fmt -check -no-color -recursive
+
+      - name: Initialise Terraform
         run: terraform init
 
-      - name: Terraform Validate
-        id: validate
-        run: terraform validate -no-color
+      - name: Validate Terraform
+        run: terraform validate
 
-      - name: Terraform Plan
+      - name: Plan Terraform
         id: plan
-        run: terraform plan -no-color 2>&1 | tee plan_output.txt
-        continue-on-error: true
+        run: terraform plan -out=terraform.plan
 
-      - name: Post Plan to PR
-        uses: actions/github-script@v9
+      - name: Show plan
+        run: terraform show -no-color -json terraform.plan > terraform.json
+
+      - uses: liatrio/terraform-change-pr-commenter@v1.14.2
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const planOutput = fs.readFileSync('plan_output.txt', 'utf8');
-            const maxLength = 65000;
-            const truncated = planOutput.length > maxLength
-              ? planOutput.slice(0, maxLength) + '\n\n... output truncated (exceeded GitHub comment limit) ...'
-              : planOutput;
+          json-file: terraform.json
+          log-changed-resources: false
 
-            const status = '${{ steps.plan.outcome }}';
-            const statusIcon = status === 'success' ? '✅' : '❌';
-
-            const body = [
-              '## Terraform Plan ' + statusIcon,
-              '',
-              '#### Initialization `${{ steps.init.outcome }}`',
-              '#### Validation `${{ steps.validate.outcome }}`',
-              '#### Plan `' + status + '`',
-              '',
-              '<details><summary>Show Plan Output</summary>',
-              '',
-              '```terraform',
-              truncated,
-              '```',
-              '',
-              '</details>',
-              '',
-              '*Triggered by @${{ github.actor }} on `${{ github.event_name }}`*',
-            ].join('\n');
-
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-
-            const existing = comments.find(c =>
-              c.user.type === 'Bot' && c.body.includes('## Terraform Plan')
-            );
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body,
-              });
-            }
-
-      - name: Fail if plan failed
-        if: steps.plan.outcome == 'failure'
-        run: exit 1
+      - name: Archive Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: terraform.plan
+          if-no-files-found: error

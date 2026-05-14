@@ -17,10 +17,8 @@ resource "github_repository" "github_iac" {
 }
 
 module "github_iac_branch_protection" {
-  source = "../branch-protection"
-  repository_id = github_repository.github_iac.node_id
-  branch_pattern = "main"
-  required_checks = [
-    "Terraform Plan"
-    ]
+  source          = "../branch-protection"
+  repository_id   = github_repository.github_iac.node_id
+  branch_pattern  = "main"
+  required_checks = ["Terraform Plan"]
 }
