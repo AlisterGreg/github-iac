@@ -54,7 +54,7 @@ jobs:
       - name: Show plan
         run: terraform show -no-color -json terraform.plan > terraform.json
 
-      - uses: liatrio/terraform-change-pr-commenter@v1.7.0
+      - uses: liatrio/terraform-change-pr-commenter@v1.14.2
         with:
           json-file: terraform.json
           log-changed-resources: false
